@@ -2,6 +2,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const { WebSocketServer } = require('ws');
+const { RoomManager } = require('./RoomManager');
 
 const PORT = process.env.PORT || 3000;
 
@@ -21,6 +22,7 @@ const wss = new WebSocketServer({ server });
 
 const rooms = {};
 const playerConnections = {};
+const roomManager = new RoomManager(rooms, playerConnections);
 
 wss.on('connection', (ws) => {
   ws.on('message', (raw) => {
@@ -49,11 +51,46 @@ function sendError(ws, message) {
 }
 
 function handleMessage(ws, msg) {
-  // TODO: route by msg.action
+  const { action, payload } = msg;
+
+  switch (action) {
+    case 'create_room':
+      roomManager.createRoom(ws, payload.name);
+      break;
+    case 'join_room':
+      roomManager.joinRoom(ws, payload.roomId, payload.name);
+      break;
+    case 'ready':
+      roomManager.toggleReady(ws, msg.playerId);
+      break;
+    case 'start_game':
+      roomManager.startGame(ws, msg.playerId, msg.roomId);
+      break;
+    case 'reconnect':
+      roomManager.reconnect(ws, payload.playerId, payload.roomId);
+      break;
+    case 'night_action':
+      roomManager.nightAction(ws, msg.playerId, msg.roomId, payload);
+      break;
+    case 'speech':
+      roomManager.speech(ws, msg.playerId, msg.roomId, payload);
+      break;
+    case 'skip_speech':
+      roomManager.skipSpeech(ws, msg.playerId, msg.roomId);
+      break;
+    case 'vote':
+      roomManager.vote(ws, msg.playerId, msg.roomId, payload);
+      break;
+    case 'hunter_shoot':
+      roomManager.hunterShoot(ws, msg.playerId, msg.roomId, payload);
+      break;
+    default:
+      sendError(ws, `Unknown action: ${action}`);
+  }
 }
 
 function handleDisconnect(ws) {
-  // TODO: handle player disconnect
+  roomManager.handleDisconnect(ws);
 }
 
 server.listen(PORT, () => {
