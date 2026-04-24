@@ -12,13 +12,22 @@ const server = http.createServer((req, res) => {
   const ext = path.extname(filePath);
   const mimeTypes = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml' };
   fs.readFile(filePath, (err, data) => {
-    if (err) { res.writeHead(404); res.end('Not found'); return; }
+    if (err) {
+      // SPA fallback: serve index.html for unknown paths (client-side routing)
+      const indexPath = path.join(distPath, 'index.html');
+      fs.readFile(indexPath, (iErr, iData) => {
+        if (iErr) { res.writeHead(404); res.end('Not found'); return; }
+        res.writeHead(200, { 'Content-Type': 'text/html' });
+        res.end(iData);
+      });
+      return;
+    }
     res.writeHead(200, { 'Content-Type': mimeTypes[ext] || 'text/plain' });
     res.end(data);
   });
 });
 
-const wss = new WebSocketServer({ server });
+const wss = new WebSocketServer({ server, path: '/ws' });
 
 const rooms = {};
 const playerConnections = {};
