@@ -25,6 +25,10 @@ export const state = reactive({
   gameOver: null,
   timeLeft: 0,
   connected: false,
+  playerCount: 12,
+  joinError: null,
+  isSpectator: false,
+  stats: { topStats: [], playerStat: null },
 });
 
 export function resetState() {
@@ -51,5 +55,9 @@ export function resetState() {
   state.log = [];
   state.gameOver = null;
   state.timeLeft = 0;
+  state.playerCount = 12;
+  state.joinError = null;
+  state.isSpectator = false;
+  state.stats = { topStats: [], playerStat: null };
   localStorage.removeItem('werewolf_playerId');
 }

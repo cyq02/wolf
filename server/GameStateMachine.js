@@ -1,10 +1,4 @@
-const { shuffle } = require('./utils');
-
-const ROLE_CONFIG = [
-  'werewolf', 'werewolf', 'werewolf',
-  'seer', 'witch', 'hunter', 'guard',
-  'villager', 'villager', 'villager', 'villager', 'villager'
-];
+const { shuffle, ROLE_PRESETS } = require('./utils');
 
 const NIGHT_TIMEOUT = { wolf: 30000, guard: 20000, seer: 20000, witch: 30000 };
 const SPEECH_TIMEOUT = 60000;
@@ -12,14 +6,15 @@ const VOTE_TIMEOUT = 30000;
 const HUNTER_TIMEOUT = 15000;
 
 class GameStateMachine {
-  constructor(room, roomManager) {
+  constructor(room, roomManager, playerCount) {
     this.room = room;
     this.rm = roomManager;
+    this.playerCount = playerCount || 12;
     this.timers = [];
   }
 
   get players() { return this.room.players; }
-  get gs() { return this.room.game; }
+  get gs() { return this.state; }
 
   _send(pid, action, payload) {
     const conn = this.rm.pc[pid];
@@ -64,15 +59,42 @@ class GameStateMachine {
     this._clearTimers();
     this.room.status = 'finished';
     const players = {};
+    const playerList = [];
     for (const [pid, p] of Object.entries(this.players)) {
-      players[pid] = { id: p.id, name: p.name, role: p.role, alive: p.alive, seatNum: p.seatNum };
+      players[pid] = { id: p.id, name: p.name, avatar: p.avatar, role: p.role, alive: p.alive, seatNum: p.seatNum };
+      playerList.push({ id: p.id, name: p.name, role: p.role, alive: p.alive, seatNum: p.seatNum, isBot: p.isBot });
     }
-    this._broadcast('game_over', { winner, players });
+
+    // MVP: random from winning team survivors
+    const isWolfWin = (winner === 'wolf');
+    const winners = playerList.filter(p => isWolfWin ? p.role === 'werewolf' : p.role !== 'werewolf');
+    const aliveWinners = winners.filter(p => p.alive);
+    const mvpPool = aliveWinners.length > 0 ? aliveWinners : winners;
+    const mvpPlayer = mvpPool.length > 0 ? mvpPool[Math.floor(Math.random() * mvpPool.length)] : null;
+    const mvp = mvpPlayer ? { id: mvpPlayer.id, name: mvpPlayer.name } : null;
+
+    this._broadcast('game_over', { winner, players, mvp });
+
+    // Save stats
+    try {
+      const { saveMatch } = require('./stats');
+      saveMatch({
+        timestamp: Date.now(),
+        roomId: this.room.id,
+        playerCount: playerList.length,
+        winner,
+        mvp: mvpPlayer?.name || null,
+        log: this.gs.log,
+        players: playerList.map(p => ({ ...p, isMvp: p.id === mvpPlayer?.id })),
+      });
+    } catch (e) {
+      console.error('Stats save failed:', e.message);
+    }
   }
 
   start() {
     const pids = Object.keys(this.players);
-    const roles = shuffle(ROLE_CONFIG);
+    const roles = shuffle(ROLE_PRESETS[this.playerCount]);
     for (let i = 0; i < pids.length; i++) {
       this.players[pids[i]].role = roles[i];
     }
@@ -86,7 +108,7 @@ class GameStateMachine {
       this._send(pid, 'your_role', { role: p.role, teammateIds });
     }
 
-    this.room.game = {
+    this.state = {
       phase: 'night',
       dayNum: 1,
       step: 'wolf',
@@ -136,6 +158,7 @@ class GameStateMachine {
       if (w.connected) {
         this._send(w.id, 'your_turn', { action: 'wolf_kill', timeLeft: 30, targets });
       }
+      this._maybeBotAct(w.id, 'wolf_kill', { targets });
     }
     this._setTimeout(() => this._resolveWolf(), NIGHT_TIMEOUT.wolf);
   }
@@ -310,12 +333,17 @@ class GameStateMachine {
       const speaker = alive[gs.currentSpeakerIndex];
       if (speaker.alive) {
         this._send(speaker.id, 'your_turn', { action: 'speech', timeLeft: 60 });
-        this._setTimeout(() => {
-          this._broadcast('speech_message', { playerId: speaker.id, name: speaker.name, message: '' });
-          gs.speeches.push({ playerId: speaker.id, message: '', order: speaker.seatNum });
-          gs.currentSpeakerIndex++;
-          this._nextSpeaker();
-        }, SPEECH_TIMEOUT);
+        this._broadcast('current_speaker', { playerId: speaker.id });
+        if (speaker.isBot) {
+          this._setTimeout(() => {
+            const msgs = ['我是好人，大家相信我', '我觉得昨晚的情况很可疑', '我没什么特别的信息', '大家冷静分析一下', '我怀疑他是狼人'];
+            this._handleSpeech(speaker.id, { message: msgs[Math.floor(Math.random() * msgs.length)] });
+          }, 1500 + Math.random() * 2000);
+        } else {
+          this._setTimeout(() => {
+            this._handleSpeech(speaker.id, { message: '' });
+          }, SPEECH_TIMEOUT);
+        }
         return;
       }
       gs.currentSpeakerIndex++;
@@ -521,6 +549,65 @@ class GameStateMachine {
     }
   }
 
+  _maybeBotAct(pid, action, info = {}) {
+    const player = this.players[pid];
+    if (!player || !player.isBot || !player.alive) return;
+    this._setTimeout(() => {
+      if (!player.alive) return;
+      this._doBotAction(pid, action, info);
+    }, 800 + Math.random() * 1500);
+  }
+
+  _doBotAction(pid, action, info) {
+    switch (action) {
+      case 'wolf_kill': {
+        const t = info.targets || [];
+        if (t.length > 0) {
+          const target = t[Math.floor(Math.random() * t.length)];
+          this.handleAction(pid, 'night_action', { action: 'wolf_kill', targetId: target.id });
+        }
+        break;
+      }
+      case 'guard': {
+        const t = info.targets || [];
+        const target = t.length > 0 ? t[Math.floor(Math.random() * t.length)] : null;
+        this.handleAction(pid, 'night_action', { action: 'guard', targetId: target ? target.id : null });
+        break;
+      }
+      case 'seer_check': {
+        const t = info.targets || [];
+        if (t.length > 0) {
+          const target = t[Math.floor(Math.random() * t.length)];
+          this.handleAction(pid, 'night_action', { action: 'seer_check', targetId: target.id });
+        }
+        break;
+      }
+      case 'witch': {
+        let healTarget = null;
+        if (info.killedId && info.healAvailable) healTarget = info.killedId;
+        this.handleAction(pid, 'night_action', { action: 'witch', healTarget, poisonTarget: null });
+        break;
+      }
+      case 'speech': {
+        const msgs = ['我是好人，大家相信我', '我觉得昨晚的情况很可疑', '我没什么特别的信息', '大家冷静分析一下', '我怀疑他是狼人'];
+        this.handleAction(pid, 'speech', { message: msgs[Math.floor(Math.random() * msgs.length)] });
+        break;
+      }
+      case 'vote': {
+        const t = info.targets || [];
+        const target = t.length > 0 ? t[Math.floor(Math.random() * t.length)] : null;
+        this.handleAction(pid, 'vote', { targetId: target ? target.id : null });
+        break;
+      }
+      case 'hunter_shoot': {
+        const t = info.targets || [];
+        const target = t.length > 0 ? t[Math.floor(Math.random() * t.length)] : null;
+        this.handleAction(pid, 'hunter_shoot', { targetId: target ? target.id : null });
+        break;
+      }
+    }
+  }
+
   sendCurrentState(playerId) {
     const gs = this.gs;
     if (!gs) return;
@@ -533,6 +620,37 @@ class GameStateMachine {
     this._send(playerId, 'your_role', { role: player.role, teammateIds });
 
     this._send(playerId, 'phase_change', { phase: gs.phase, dayNum: gs.dayNum, step: gs.step });
+
+    // Send full game log
+    if (gs.log && gs.log.length > 0) {
+      this._send(playerId, 'full_log', { log: gs.log });
+    }
+
+    // Send all dead players
+    const deadIds = Object.values(this.players).filter(p => !p.alive).map(p => p.id);
+    if (deadIds.length > 0) {
+      this._send(playerId, 'death_announce', { deadIds });
+    }
+
+    // Replay current day's speeches
+    if (gs.speeches && gs.speeches.length > 0) {
+      for (const s of gs.speeches) {
+        this._send(playerId, 'speech_message', { playerId: s.playerId, name: this.players[s.playerId]?.name, message: s.message });
+      }
+    }
+
+    // Send current speaker if in speech phase
+    if (gs.step === 'speech') {
+      const alive = this._alivePlayers().sort((a, b) => a.seatNum - b.seatNum);
+      if (gs.currentSpeakerIndex < alive.length) {
+        this._send(playerId, 'current_speaker', { playerId: alive[gs.currentSpeakerIndex].id });
+      }
+    }
+
+    // Send partial votes if in vote phase
+    if (gs.step === 'vote' && Object.keys(gs.votes).length > 0) {
+      this._send(playerId, 'partial_votes', { votes: gs.votes });
+    }
 
     if (gs.step === 'wolf' && player.role === 'werewolf' && player.alive) {
       this._send(playerId, 'your_turn', { action: 'wolf_kill', timeLeft: 15, targets: this._alivePlayers().filter(p => p.role !== 'werewolf').map(p => ({ id: p.id, name: p.name, seatNum: p.seatNum })) });

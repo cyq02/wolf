@@ -51,7 +51,7 @@ export function useWebSocket() {
 
   function handleMessage(msg) {
     if (msg.type === 'error') {
-      alert(msg.payload.message);
+      state.joinError = msg.payload.message;
       return;
     }
 
@@ -70,6 +70,7 @@ export function useWebSocket() {
         state.roomStatus = payload.status;
         state.hostId = payload.hostId;
         if (payload.roomId) state.roomId = payload.roomId;
+        if (payload.playerCount) state.playerCount = payload.playerCount;
         break;
       case 'game_started':
         state.roomStatus = 'playing';
@@ -83,7 +84,13 @@ export function useWebSocket() {
         state.dayNum = payload.dayNum;
         state.step = payload.step;
         state.isMyTurn = false;
-        state.log.push({ dayNum: payload.dayNum, phase: payload.phase, event: 'phase_change' });
+        if (payload.step === 'wolf') {
+          state.log.push({ dayNum: payload.dayNum, phase: payload.phase, event: 'night_start', data: {} });
+        } else if (payload.step === 'day_start') {
+          state.log.push({ dayNum: payload.dayNum, phase: payload.phase, event: 'day_start', data: {} });
+        } else {
+          state.log.push({ dayNum: payload.dayNum, phase: payload.phase, event: 'phase_change', data: {} });
+        }
         break;
       case 'your_turn':
         state.isMyTurn = true;
@@ -102,26 +109,43 @@ export function useWebSocket() {
       case 'speech_message':
         state.speeches.push(payload);
         break;
+      case 'current_speaker':
+        state.currentSpeakerId = payload.playerId;
+        break;
       case 'speech_end':
+        state.currentSpeakerId = null;
         break;
       case 'vote_result':
         state.votes = payload.votes;
         state.eliminated = payload.eliminated;
+        state.log.push({ dayNum: state.dayNum, phase: state.phase, event: 'vote', data: { eliminated: payload.eliminated } });
         break;
       case 'death_announce':
         state.deadIds = payload.deadIds;
         for (const id of payload.deadIds) {
           if (state.players[id]) state.players[id].alive = false;
         }
+        if (payload.deadIds.includes(state.playerId)) state.isSpectator = true;
+        state.log.push({ dayNum: state.dayNum, phase: state.phase, event: 'deaths', data: { deadIds: payload.deadIds } });
         break;
       case 'hunter_trigger':
         state.isMyTurn = true;
         state.nightAction = 'hunter_shoot';
         state.timeLeft = payload.timeLeft || 15;
+        state.log.push({ dayNum: state.dayNum, phase: state.phase, event: 'hunter_shoot', data: {} });
         break;
       case 'game_over':
         state.gameOver = payload;
         state.roomStatus = 'finished';
+        break;
+      case 'full_log':
+        state.log = payload.log;
+        break;
+      case 'partial_votes':
+        state.votes = payload.votes;
+        break;
+      case 'stats_data':
+        state.stats = payload;
         break;
     }
   }

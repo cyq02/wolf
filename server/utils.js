@@ -15,4 +15,12 @@ function shuffle(arr) {
   return a;
 }
 
-module.exports = { generateId, generateRoomId, shuffle };
+const ROLE_PRESETS = {
+  6:  ['werewolf', 'seer', 'witch', 'villager', 'villager', 'villager'],
+  8:  ['werewolf', 'werewolf', 'seer', 'witch', 'hunter', 'villager', 'villager', 'villager'],
+  9:  ['werewolf', 'werewolf', 'seer', 'witch', 'hunter', 'guard', 'villager', 'villager', 'villager'],
+  10: ['werewolf', 'werewolf', 'werewolf', 'seer', 'witch', 'hunter', 'guard', 'villager', 'villager', 'villager'],
+  12: ['werewolf', 'werewolf', 'werewolf', 'seer', 'witch', 'hunter', 'guard', 'villager', 'villager', 'villager', 'villager', 'villager'],
+};
+
+module.exports = { generateId, generateRoomId, shuffle, ROLE_PRESETS };

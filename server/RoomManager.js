@@ -31,12 +31,12 @@ class RoomManager {
     if (!room) return;
     const players = {};
     for (const [pid, p] of Object.entries(room.players)) {
-      players[pid] = { id: p.id, name: p.name, seatNum: p.seatNum, alive: p.alive, ready: p.ready, connected: p.connected };
+      players[pid] = { id: p.id, name: p.name, avatar: p.avatar, seatNum: p.seatNum, alive: p.alive, ready: p.ready, connected: p.connected, isBot: p.isBot || false };
     }
-    this._broadcast(roomId, 'room_info', { players, status: room.status, hostId: room.hostId, roomId: room.id });
+    this._broadcast(roomId, 'room_info', { players, status: room.status, hostId: room.hostId, roomId: room.id, playerCount: room.playerCount, hasPassword: !!room.password });
   }
 
-  createRoom(ws, name) {
+  createRoom(ws, name, avatar, password) {
     const playerId = generateId();
     let roomId = generateRoomId();
     while (this.rooms[roomId]) { roomId = generateRoomId(); }
@@ -47,27 +47,30 @@ class RoomManager {
       id: roomId,
       hostId: playerId,
       players: {
-        [playerId]: { id: playerId, name, role: null, seatNum: 1, alive: true, ready: false, connected: true }
+        [playerId]: { id: playerId, name, avatar, role: null, seatNum: 1, alive: true, ready: false, connected: true }
       },
       game: null,
       status: 'waiting',
-      disconnectedAt: {}
+      disconnectedAt: {},
+      password: password || null,
+      playerCount: 12
     };
 
     ws.send(JSON.stringify({ type: 'event', action: 'room_created', payload: { playerId, roomId } }));
     this._sendRoomInfo(roomId);
   }
 
-  joinRoom(ws, roomId, name) {
+  joinRoom(ws, roomId, name, avatar, password) {
     const room = this.rooms[roomId];
     if (!room) { ws.send(JSON.stringify({ type: 'error', action: 'error', payload: { message: '房间不存在' } })); return; }
     if (room.status !== 'waiting') { ws.send(JSON.stringify({ type: 'error', action: 'error', payload: { message: '游戏已开始' } })); return; }
-    if (Object.keys(room.players).length >= 12) { ws.send(JSON.stringify({ type: 'error', action: 'error', payload: { message: '房间已满' } })); return; }
+    if (room.password && room.password !== password) { ws.send(JSON.stringify({ type: 'error', action: 'error', payload: { message: '房间密码错误' } })); return; }
+    if (Object.keys(room.players).length >= room.playerCount) { ws.send(JSON.stringify({ type: 'error', action: 'error', payload: { message: '房间已满' } })); return; }
 
     const playerId = generateId();
     const seatNum = Object.keys(room.players).length + 1;
     this.pc[playerId] = { ws, roomId };
-    room.players[playerId] = { id: playerId, name, role: null, seatNum, alive: true, ready: false, connected: true };
+    room.players[playerId] = { id: playerId, name, avatar, role: null, seatNum, alive: true, ready: false, connected: true };
 
     ws.send(JSON.stringify({ type: 'event', action: 'room_joined', payload: { playerId, roomId } }));
     this._sendRoomInfo(roomId);
@@ -83,24 +86,47 @@ class RoomManager {
     this._sendRoomInfo(room.id);
   }
 
-  startGame(ws, playerId, roomId) {
+  startGame(ws, playerId, roomId, testMode = false, playerCount) {
     const room = this.rooms[roomId];
     if (!room || room.hostId !== playerId) {
       ws.send(JSON.stringify({ type: 'error', action: 'error', payload: { message: '只有房主可以开始游戏' } }));
       return;
     }
-    const playerList = Object.values(room.players);
-    if (playerList.length !== 12) {
-      ws.send(JSON.stringify({ type: 'error', action: 'error', payload: { message: '需要12名玩家' } }));
-      return;
+
+    const validCounts = [6, 8, 9, 10, 12];
+    if (playerCount && validCounts.includes(playerCount)) {
+      room.playerCount = playerCount;
     }
-    if (!playerList.every(p => p.ready)) {
-      ws.send(JSON.stringify({ type: 'error', action: 'error', payload: { message: '所有玩家必须准备' } }));
-      return;
+
+    const playerList = Object.values(room.players);
+
+    if (testMode) {
+      const BOT_NAMES = ['影', '风', '雷', '雾', '霜', '月', '星', '雪', '云', '电', '雨'];
+      const BOT_AVATARS = ['🐺','🌙','⚔️','🛡️','🔮','🧪','🏹','🎭','🗡️','🏰','💀'];
+      let botIdx = 0;
+      while (Object.keys(room.players).length < room.playerCount) {
+        const botId = 'bot_' + generateId();
+        const seatNum = Object.keys(room.players).length + 1;
+        room.players[botId] = {
+          id: botId, name: BOT_NAMES[botIdx] || `机器人${botIdx + 1}`, avatar: BOT_AVATARS[botIdx] || '❓',
+          role: null, seatNum, alive: true, ready: true, connected: true, isBot: true
+        };
+        botIdx++;
+      }
+      this._sendRoomInfo(roomId);
+    } else {
+      if (playerList.length !== room.playerCount) {
+        ws.send(JSON.stringify({ type: 'error', action: 'error', payload: { message: `需要${room.playerCount}名玩家` } }));
+        return;
+      }
+      if (!playerList.every(p => p.ready)) {
+        ws.send(JSON.stringify({ type: 'error', action: 'error', payload: { message: '所有玩家必须准备' } }));
+        return;
+      }
     }
 
     room.status = 'playing';
-    const fsm = new GameStateMachine(room, this);
+    const fsm = new GameStateMachine(room, this, room.playerCount);
     room.game = fsm;
     fsm.start();
   }

@@ -39,7 +39,8 @@ wss.on('connection', (ws) => {
       const msg = JSON.parse(raw);
       handleMessage(ws, msg);
     } catch (e) {
-      sendError(ws, 'Invalid message format');
+      console.error('Message error:', e.message);
+      sendError(ws, e.message || 'Invalid message format');
     }
   });
   ws.on('close', () => {
@@ -64,16 +65,16 @@ function handleMessage(ws, msg) {
 
   switch (action) {
     case 'create_room':
-      roomManager.createRoom(ws, payload.name);
+      roomManager.createRoom(ws, payload.name, payload.avatar, payload.password);
       break;
     case 'join_room':
-      roomManager.joinRoom(ws, payload.roomId, payload.name);
+      roomManager.joinRoom(ws, payload.roomId, payload.name, payload.avatar, payload.password);
       break;
     case 'ready':
       roomManager.toggleReady(ws, msg.playerId);
       break;
     case 'start_game':
-      roomManager.startGame(ws, msg.playerId, msg.roomId);
+      roomManager.startGame(ws, msg.playerId, msg.roomId, payload?.testMode, payload?.playerCount);
       break;
     case 'reconnect':
       roomManager.reconnect(ws, payload.playerId, payload.roomId);
@@ -93,6 +94,13 @@ function handleMessage(ws, msg) {
     case 'hunter_shoot':
       roomManager.hunterShoot(ws, msg.playerId, msg.roomId, payload);
       break;
+    case 'get_stats': {
+      const { getTopStats, getPlayerStats } = require('./stats');
+      const topStats = getTopStats();
+      const playerStat = payload.name ? getPlayerStats(payload.name) : null;
+      send(ws, 'stats_data', { topStats, playerStat });
+      break;
+    }
     default:
       sendError(ws, `Unknown action: ${action}`);
   }
