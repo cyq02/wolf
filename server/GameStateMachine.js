@@ -281,8 +281,10 @@ class GameStateMachine {
     if (gs.nightActions.witchPoisonTarget) gs.witchPoisonUsed = true;
     gs.lastGuardTarget = gs.nightActions.guardTarget;
 
-    this._broadcast('death_announce', { deadIds: dead.map(d => d.id) });
-    gs.log.push({ dayNum: gs.dayNum, phase: 'night', event: 'deaths', data: { deadIds: dead.map(d => d.id) } });
+    const deadRoles = {};
+    dead.forEach(d => { deadRoles[d.id] = this.players[d.id].role; });
+    this._broadcast('death_announce', { deadIds: dead.map(d => d.id), deadRoles });
+    gs.log.push({ dayNum: gs.dayNum, phase: 'night', event: 'deaths', data: { deadIds: dead.map(d => d.id), deadRoles } });
 
     const hunterDead = dead.find(d => this.players[d.id].role === 'hunter');
     if (hunterDead && hunterDead.cause !== 'poison') {
@@ -393,7 +395,7 @@ class GameStateMachine {
 
     if (eliminated) {
       this.players[eliminated].alive = false;
-      this._broadcast('death_announce', { deadIds: [eliminated] });
+      this._broadcast('death_announce', { deadIds: [eliminated], deadRoles: { [eliminated]: this.players[eliminated].role } });
 
       if (this.players[eliminated].role === 'hunter') {
         gs.hunterPending = true;
@@ -535,8 +537,11 @@ class GameStateMachine {
     const targetId = payload.targetId;
     if (targetId && this.players[targetId] && this.players[targetId].alive) {
       this.players[targetId].alive = false;
-      this._broadcast('death_announce', { deadIds: [targetId] });
+      this._broadcast('death_announce', { deadIds: [targetId], deadRoles: { [targetId]: this.players[targetId].role } });
+      this._broadcast('hunter_shot_result', { hunterId: playerId, targetId });
       gs.log.push({ dayNum: gs.dayNum, phase: gs.phase, event: 'hunter_shoot', data: { hunterId: playerId, targetId } });
+    } else {
+      this._broadcast('hunter_shot_result', { hunterId: playerId, targetId: null });
     }
 
     const winner = this._checkWin();

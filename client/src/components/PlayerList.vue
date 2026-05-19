@@ -18,7 +18,8 @@
         <span class="avatar" v-html="renderAvatar(p)"></span>
         <span class="name">{{ p.name }}</span>
         <span v-if="state.teammateIds.includes(p.id)" class="tag wolf">狼</span>
-        <span v-if="!p.alive" class="tag dead">阵亡·观战</span>
+        <span v-if="!p.alive" class="tag dead">阵亡</span>
+        <span v-if="!p.alive && p.revealedRole" class="tag role-reveal" :class="'revealed-' + p.revealedRole">{{ roleLabels[p.revealedRole] }}</span>
         <span v-if="!p.connected && p.alive" class="tag dc">断线</span>
         <span v-if="p.id === state.playerId" class="tag me">我</span>
       </div>
@@ -29,6 +30,8 @@
 <script setup>
 import { computed } from 'vue';
 import { state } from '../game.js';
+
+const roleLabels = { werewolf: '狼', seer: '预', witch: '巫', hunter: '猎', guard: '守', villager: '民' };
 
 const sortedPlayers = computed(() =>
   Object.values(state.players).sort((a, b) => a.seatNum - b.seatNum)
@@ -88,6 +91,13 @@ function renderAvatar(p) {
 .tag { font-size: 9px; padding: 0px 5px; border-radius: 1px; font-weight: 600; letter-spacing: 0.5px; flex-shrink: 0; }
 .tag.wolf { background: rgba(140, 30, 30, 0.15); color: #c04040; border: 1px solid rgba(140, 30, 30, 0.25); }
 .tag.dead { background: rgba(60, 55, 75, 0.2); color: #5a5070; }
+.tag.role-reveal { font-size: 9px; padding: 0px 4px; border-radius: 1px; font-weight: 600; }
+.revealed-werewolf { background: rgba(140, 30, 30, 0.15); color: #c04040; border: 1px solid rgba(140, 30, 30, 0.25); }
+.revealed-seer { background: rgba(50, 80, 140, 0.12); color: #5090c0; border: 1px solid rgba(50, 80, 140, 0.2); }
+.revealed-witch { background: rgba(100, 50, 130, 0.12); color: #9060b0; border: 1px solid rgba(100, 50, 130, 0.2); }
+.revealed-hunter { background: rgba(140, 80, 30, 0.12); color: #c08040; border: 1px solid rgba(140, 80, 30, 0.2); }
+.revealed-guard { background: rgba(30, 100, 50, 0.12); color: #40a060; border: 1px solid rgba(30, 100, 50, 0.2); }
+.revealed-villager { background: rgba(60, 55, 75, 0.15); color: #908898; border: 1px solid rgba(60, 55, 75, 0.15); }
 .tag.dc { background: rgba(80, 70, 100, 0.15); color: #6a6080; }
 .tag.me { background: rgba(80, 70, 140, 0.15); color: #9080c0; border: 1px solid rgba(80, 70, 140, 0.25); }
 </style>

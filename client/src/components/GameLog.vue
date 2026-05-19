@@ -35,7 +35,13 @@ function formatEvent(entry) {
     case 'day_start': return '天光大亮';
     case 'deaths': return entry.data.deadIds.length > 0 ? `${entry.data.deadIds.length}人殒命` : '平安之夜';
     case 'vote': return entry.data.eliminated ? '审判放逐' : '无人出局';
-    case 'hunter_shoot': return '猎人遗言';
+    case 'hunter_shoot': {
+      if (entry.data.targetId) {
+        const target = state.players[entry.data.targetId];
+        return `猎人开枪 · ${target?.name || '???'}阵亡`;
+      }
+      return '猎人放弃开枪';
+    }
     case 'phase_change': return '';
     default: return entry.event;
   }

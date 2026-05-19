@@ -14,16 +14,20 @@
         class="vote-target"
         :class="{ selected: selected === p.id }"
         @click="selected = p.id"
-        :disabled="voted"
+        :disabled="voted || state.isSpectator"
       >
         <span class="seat">{{ p.seatNum }}</span>
         <span class="target-name">{{ p.name }}</span>
       </button>
     </div>
-    <div class="vote-actions">
+    <div v-if="!state.isSpectator" class="vote-actions">
       <span v-if="!voted" class="vote-progress">已投票 {{ voteCount }} / {{ totalVoters }} 人</span>
       <button class="btn-primary" @click="submitVote" :disabled="voted || !selected">投票</button>
       <button class="btn-secondary" @click="abstain" :disabled="voted">弃权</button>
+    </div>
+    <div v-else class="vote-actions">
+      <span class="vote-progress">已投票 {{ voteCount }} / {{ totalVoters }} 人</span>
+      <span class="spectator-label">👻 观战中，无法投票</span>
     </div>
     <div v-if="state.votes && Object.keys(state.votes).length > 0" class="vote-result">
       <div class="result-title">投票揭晓</div>
@@ -89,6 +93,7 @@ function abstain() { send('vote', { targetId: null }); voted.value = true; }
 
 .vote-actions { display: flex; gap: 8px; justify-content: center; margin-bottom: 16px; align-items: center; }
 .vote-progress { font-size: 12px; color: #6a6080; letter-spacing: 1px; margin-right: 6px; }
+.spectator-label { font-size: 11px; color: #4a4460; letter-spacing: 1px; }
 
 .vote-result {
   background: rgba(14, 11, 28, 0.4);

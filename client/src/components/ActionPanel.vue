@@ -1,8 +1,9 @@
 <template>
   <div class="action-panel">
-    <div v-if="state.isSpectator" class="spectator-hint">
+    <div v-if="state.isSpectator && state.phase === 'night' && state.step !== 'hunter_trigger'" class="spectator-hint">
       <span class="hint-icon">👁️</span>
       <p>你已阵亡，正在观战中</p>
+      <p class="hint-sub">{{ spectatorNightLabel }}</p>
     </div>
     <template v-else-if="state.phase === 'night'">
       <!-- Wolf -->
@@ -187,6 +188,11 @@ const seerTargets = computed(() => alivePlayers.value.filter(p => p.id !== state
 const witchTargets = computed(() => alivePlayers.value.filter(p => p.id !== state.playerId));
 const hunterTargets = computed(() => alivePlayers.value);
 
+const spectatorNightLabel = computed(() => {
+  const labels = { wolf: '狼人正在行动...', guard: '守卫正在守望...', seer: '预言家正在查验...', witch: '女巫正在抉择...', night_resolve: '命运揭晓中...' };
+  return labels[state.step] || '夜晚进行中...';
+});
+
 function getPlayerName(pid) { return state.players[pid]?.name || '???'; }
 
 function wolfKill() { send('night_action', { action: 'wolf_kill', targetId: selectedTarget.value }); acted.value = true; }
@@ -264,6 +270,7 @@ function hunterSkip() { send('hunter_shoot', { targetId: null }); }
 .waiting p { color: #3a3450; font-size: 14px; letter-spacing: 3px; }
 
 .spectator-hint { text-align: center; padding: 60px 20px; animation: fadeIn 0.6s; }
-.hint-icon { font-size: 40px; display: block; margin-bottom: 14px; }
-.spectator-hint p { color: #5a5070; font-size: 14px; letter-spacing: 3px; }
+.hint-icon { font-size: 40px; display: block; margin-bottom: 14px; filter: brightness(1.2); }
+.spectator-hint p { color: #a098b8; font-size: 14px; letter-spacing: 3px; }
+.hint-sub { font-size: 11px !important; color: #8078a0 !important; letter-spacing: 1px !important; margin-top: 8px; }
 </style>

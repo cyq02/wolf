@@ -3,7 +3,6 @@
     <div class="game-scene">
       <div class="moon" :class="{ hidden: state.phase === 'day' }"></div>
       <div class="stars" :class="{ hidden: state.phase === 'day' }"></div>
-      <div v-if="state.phase === 'day'" class="sun"></div>
       <div class="fog"></div>
     </div>
 
@@ -21,7 +20,10 @@
         <div class="death-icon">💀</div>
         <div class="death-text">
           <template v-if="deathNames.length > 0">
-            <span v-for="name in deathNames" :key="name" class="death-name">{{ name }}</span>
+            <div v-for="info in deathNames" :key="info.id" class="death-entry">
+              <span class="death-name">{{ info.name }}</span>
+              <span v-if="info.role" class="death-role" :class="'role-' + info.role">{{ info.roleLabel }}</span>
+            </div>
             <span class="death-label">已殒命</span>
           </template>
           <template v-else>
@@ -66,12 +68,13 @@
         <PlayerList />
       </div>
       <div class="main-area">
-        <div v-if="state.isSpectator && state.step && !['speech', 'vote'].includes(state.step)" class="spectator-view">
+        <div v-if="state.isSpectator && state.step && !['speech', 'vote', 'night_resolve', 'hunter_trigger'].includes(state.step) && state.phase === 'night'" class="spectator-view">
           <div class="spectator-icon">👁️</div>
           <p>你正在观战，可以看到所有公开信息</p>
+          <p class="spectator-sub">{{ spectatorStepLabel }}</p>
         </div>
-        <ActionPanel v-else-if="state.step && state.step !== 'day_start'" :key="state.step" />
-        <div v-else-if="showWaiting" class="waiting">
+        <ActionPanel v-else-if="state.step && state.step !== 'day_start' && !showBanner" :key="state.step" />
+        <div v-else-if="state.phase === 'night' && showWaiting" class="waiting">
           <div class="waiting-icon">🌙</div>
           <p>夜深了，请闭眼...</p>
         </div>
@@ -81,6 +84,7 @@
       </div>
     </div>
     <RoleGuide :role="state.role" />
+    <AiAssistant />
   </div>
 </template>
 
@@ -91,6 +95,7 @@ import PlayerList from '../components/PlayerList.vue';
 import GameLog from '../components/GameLog.vue';
 import ActionPanel from '../components/ActionPanel.vue';
 import RoleGuide from '../components/RoleGuide.vue';
+import AiAssistant from '../components/AiAssistant.vue';
 import { useAudio } from '../composables/useAudio';
 
 const { audioEnabled, toggleAudio, sfx, startNightAmbient, stopNightAmbient, startDayAmbient, stopDayAmbient, stopAll } = useAudio();
@@ -114,6 +119,11 @@ const roleLabel = computed(() => {
 });
 
 const roleIcons = { werewolf: '🐺', seer: '🔮', witch: '🧪', hunter: '🔫', guard: '🛡️', villager: '👤' };
+
+const spectatorStepLabel = computed(() => {
+  const labels = { wolf: '狼人正在行动...', guard: '守卫正在守望...', seer: '预言家正在查验...', witch: '女巫正在抉择...', night_resolve: '命运揭晓中...' };
+  return labels[state.step] || '等待中...';
+});
 
 // Countdown timer
 const timerDash = computed(() => {
@@ -177,12 +187,22 @@ const showDeath = ref(false);
 const deathNames = ref([]);
 let deathTimeout = null;
 
+const roleLabels = { werewolf: '狼人', seer: '预言家', witch: '女巫', hunter: '猎人', guard: '守卫', villager: '村民' };
+
 watch(() => state.deadIds, (ids) => {
   if (!ids || ids.length === 0) return;
   if (deathTimeout) clearTimeout(deathTimeout);
   showBanner.value = false;
   if (bannerTimeout) clearTimeout(bannerTimeout);
-  deathNames.value = ids.map(id => state.players[id]?.name || '???').filter(Boolean);
+  deathNames.value = ids.map(id => {
+    const p = state.players[id];
+    return {
+      id,
+      name: p?.name || '???',
+      role: p?.revealedRole || null,
+      roleLabel: p?.revealedRole ? roleLabels[p.revealedRole] : null,
+    };
+  });
   sfx.deathAnnounce();
   showDeath.value = true;
   deathTimeout = setTimeout(() => { showDeath.value = false; }, 3500);
@@ -212,9 +232,9 @@ watch(() => state.gameOver, (val) => {
 /* Scene */
 .game-scene { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
 .moon {
-  position: absolute; top: 5%; right: 14%; width: 60px; height: 60px; border-radius: 50%;
+  position: absolute; top: 2%; left: 40%; width: 50px; height: 50px; border-radius: 50%;
   background: radial-gradient(circle at 35% 35%, #e8e0d0, #c8c0a8);
-  box-shadow: 0 0 30px rgba(200, 190, 160, 0.12), 0 0 60px rgba(200, 190, 160, 0.06);
+  box-shadow: 0 0 20px rgba(200, 190, 160, 0.08);
   animation: moonGlow 4s ease-in-out infinite;
   transition: opacity 1.2s ease;
 }
@@ -234,12 +254,6 @@ watch(() => state.gameOver, (val) => {
   animation: twinkle 3s ease-in-out infinite alternate;
 }
 .stars.hidden { opacity: 0; }
-
-.sun {
-  position: absolute; top: 5%; right: 14%; width: 50px; height: 50px; border-radius: 50%;
-  background: radial-gradient(circle at 40% 40%, #f5e6a0, #d4a840);
-  box-shadow: 0 0 40px rgba(212, 168, 64, 0.15), 0 0 80px rgba(212, 168, 64, 0.06);
-}
 
 .fog { position: absolute; bottom: 0; left: 0; right: 0; height: 25%; background: linear-gradient(to top, rgba(12, 10, 24, 0.4), transparent); }
 
@@ -269,7 +283,15 @@ watch(() => state.gameOver, (val) => {
 }
 .death-icon { font-size: 48px; }
 .death-text { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: center; }
-.death-name { font-size: 20px; color: #e04040; font-weight: 700; letter-spacing: 2px; padding: 4px 12px; border: 1px solid rgba(200, 40, 40, 0.3); border-radius: 2px; background: rgba(200, 40, 40, 0.08); }
+.death-name { font-size: 20px; color: #e04040; font-weight: 700; letter-spacing: 2px; }
+.death-entry { display: flex; align-items: center; gap: 8px; }
+.death-role { font-size: 12px; padding: 2px 8px; border-radius: 2px; font-weight: 600; letter-spacing: 1px; }
+.death-role.role-werewolf { background: rgba(140, 30, 30, 0.2); color: #e06060; }
+.death-role.role-seer { background: rgba(50, 80, 140, 0.2); color: #60a0d0; }
+.death-role.role-witch { background: rgba(100, 50, 130, 0.2); color: #b070d0; }
+.death-role.role-hunter { background: rgba(140, 80, 30, 0.2); color: #d09050; }
+.death-role.role-guard { background: rgba(30, 100, 50, 0.2); color: #50c070; }
+.death-role.role-villager { background: rgba(80, 70, 100, 0.2); color: #a098b0; }
 .death-label { font-size: 16px; color: #a06060; letter-spacing: 3px; }
 .peace-label { font-size: 18px; color: #6a8a6a; letter-spacing: 4px; }
 
@@ -336,7 +358,11 @@ watch(() => state.gameOver, (val) => {
   gap: 10px; padding: 10px; overflow: hidden;
 }
 .sidebar-left, .sidebar-right { overflow-y: auto; }
-.main-area { display: flex; flex-direction: column; align-items: center; justify-content: center; overflow-y: auto; }
+.main-area {
+  position: relative; z-index: 1;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  overflow-y: auto;
+}
 
 .waiting { text-align: center; animation: fadeIn 0.6s; }
 .waiting-icon { font-size: 44px; margin-bottom: 16px; animation: float 3s ease-in-out infinite; }
@@ -351,8 +377,9 @@ watch(() => state.gameOver, (val) => {
   color: #9080b0; font-size: 12px; letter-spacing: 2px;
 }
 .spectator-view { text-align: center; animation: fadeIn 0.6s; }
-.spectator-icon { font-size: 44px; margin-bottom: 16px; animation: float 3s ease-in-out infinite; }
-.spectator-view p { color: #5a5070; font-size: 15px; letter-spacing: 3px; }
+.spectator-icon { font-size: 44px; margin-bottom: 16px; animation: float 3s ease-in-out infinite; filter: brightness(1.2); }
+.spectator-view p { color: #a098b8; font-size: 15px; letter-spacing: 3px; }
+.spectator-sub { color: #8078a0 !important; font-size: 12px !important; letter-spacing: 1px !important; margin-top: 8px; }
 
 @keyframes twinkle { 0% { opacity: 0.6; } 100% { opacity: 1; } }
 </style>

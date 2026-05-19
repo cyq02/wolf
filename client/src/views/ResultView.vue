@@ -1,7 +1,6 @@
 <template>
   <div class="result-container">
     <div class="result-scene">
-      <div class="moon"></div>
       <div class="stars"></div>
     </div>
     <div class="result-card">
@@ -82,12 +81,6 @@ const timeline = computed(() => {
 <style scoped>
 .result-container { display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 20px; position: relative; }
 .result-scene { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
-.moon {
-  position: absolute; top: 6%; right: 12%; width: 70px; height: 70px; border-radius: 50%;
-  background: radial-gradient(circle at 35% 35%, #f0ead8, #c8c0a8);
-  box-shadow: 0 0 30px rgba(200, 190, 160, 0.12);
-  animation: moonGlow 4s ease-in-out infinite;
-}
 .stars {
   position: absolute; inset: 0;
   background-image:

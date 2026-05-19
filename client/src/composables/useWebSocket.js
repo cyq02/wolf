@@ -84,6 +84,19 @@ export function useWebSocket() {
         state.dayNum = payload.dayNum;
         state.step = payload.step;
         state.isMyTurn = false;
+        // Reset per-phase state (only at the start of each phase, not every step)
+        if (payload.step === 'wolf') {
+          state.seerResult = null;
+          state.witchInfo = null;
+          state.wolfVotes = {};
+        }
+        if (payload.step === 'vote') {
+          state.votes = {};
+          state.eliminated = null;
+        }
+        if (payload.step === 'speech') {
+          state.speeches = [];
+        }
         if (payload.step === 'wolf') {
           state.log.push({ dayNum: payload.dayNum, phase: payload.phase, event: 'night_start', data: {} });
         } else if (payload.step === 'day_start') {
@@ -125,14 +138,26 @@ export function useWebSocket() {
         for (const id of payload.deadIds) {
           if (state.players[id]) state.players[id].alive = false;
         }
+        if (payload.deadRoles) {
+          for (const [id, role] of Object.entries(payload.deadRoles)) {
+            if (state.players[id]) state.players[id].revealedRole = role;
+          }
+        }
         if (payload.deadIds.includes(state.playerId)) state.isSpectator = true;
-        state.log.push({ dayNum: state.dayNum, phase: state.phase, event: 'deaths', data: { deadIds: payload.deadIds } });
+        state.log.push({ dayNum: state.dayNum, phase: state.phase, event: 'deaths', data: { deadIds: payload.deadIds, deadRoles: payload.deadRoles || {} } });
         break;
       case 'hunter_trigger':
         state.isMyTurn = true;
         state.nightAction = 'hunter_shoot';
         state.timeLeft = payload.timeLeft || 15;
-        state.log.push({ dayNum: state.dayNum, phase: state.phase, event: 'hunter_shoot', data: {} });
+        break;
+      case 'hunter_shot_result':
+        state.log.push({
+          dayNum: state.dayNum,
+          phase: state.phase,
+          event: 'hunter_shoot',
+          data: { hunterId: payload.hunterId, targetId: payload.targetId },
+        });
         break;
       case 'game_over':
         state.gameOver = payload;

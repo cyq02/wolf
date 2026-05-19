@@ -19,12 +19,12 @@
       </div>
       <div v-if="state.speeches.length === 0" class="no-msg">无人发言</div>
     </div>
-    <div v-if="state.isMyTurn && state.step === 'speech'" class="chat-input">
+    <div v-if="state.isMyTurn && state.step === 'speech' && !state.isSpectator" class="chat-input">
       <input v-model="msg" placeholder="说些什么..." maxlength="500" @keyup.enter="sendSpeech" />
       <button class="btn-primary" @click="sendSpeech" :disabled="!msg.trim()">发言</button>
       <button class="btn-secondary" @click="skipSpeech">沉默</button>
     </div>
-    <div v-if="state.isMyTurn && state.step === 'speech'" class="phrase-bar">
+    <div v-if="state.isMyTurn && state.step === 'speech' && !state.isSpectator" class="phrase-bar">
       <div class="phrase-title">快捷发言</div>
       <div class="phrase-list">
         <button v-for="(phrase, i) in PHRASE_PACKS" :key="i" class="phrase-btn"
@@ -114,10 +114,10 @@ function selectTarget(p) {
   display: flex; justify-content: space-between; align-items: center;
   padding: 8px 12px; margin-bottom: 6px;
 }
-.chat-title { font-size: 13px; color: #5a5070; letter-spacing: 2px; }
+.chat-title { font-size: 14px; color: #8a80a0; letter-spacing: 2px; font-weight: 600; }
 .my-turn-hint {
-  font-size: 11px; padding: 2px 10px; border-radius: 1px;
-  background: rgba(212, 168, 75, 0.08); color: #d4a84b;
+  font-size: 12px; padding: 2px 10px; border-radius: 1px;
+  background: rgba(212, 168, 75, 0.1); color: #d4a84b;
   border: 1px solid rgba(212, 168, 75, 0.15);
   animation: pulse 1.5s ease-in-out infinite; letter-spacing: 1px;
 }
@@ -129,12 +129,12 @@ function selectTarget(p) {
   border-radius: 2px; border: 1px solid rgba(80, 70, 120, 0.08);
 }
 .message { animation: fadeIn 0.3s ease; }
-.msg-bubble { padding: 8px 12px; border-radius: 2px; background: rgba(25, 20, 45, 0.5); display: flex; align-items: flex-start; gap: 8px; }
+.msg-bubble { padding: 10px 14px; border-radius: 2px; background: rgba(25, 20, 45, 0.6); display: flex; align-items: flex-start; gap: 8px; }
 .is-me .msg-bubble { background: rgba(212, 168, 75, 0.06); border: 1px solid rgba(212, 168, 75, 0.1); }
 .is-skip .msg-bubble { opacity: 0.35; }
 .msg-avatar { width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; overflow: hidden; margin-top: 1px; }
-.msg-name { color: #e0c870; font-weight: 700; font-size: 13px; white-space: nowrap; }
-.msg-text { color: #d8d0e0; font-size: 14px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+.msg-name { color: #e0c870; font-weight: 700; font-size: 14px; white-space: nowrap; }
+.msg-text { color: #e8e0f0; font-size: 15px; line-height: 1.6; -webkit-font-smoothing: antialiased; }
 .no-msg { text-align: center; color: #5a5070; padding: 40px; font-size: 14px; letter-spacing: 2px; }
 
 .chat-input { display: flex; gap: 6px; margin-top: 8px; }
